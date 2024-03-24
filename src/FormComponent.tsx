@@ -1,4 +1,4 @@
-import React, { useRef, forwardRef, useImperativeHandle } from "react";
+import React, { useRef } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import {
   ChakraProvider,
@@ -10,51 +10,75 @@ import {
   FormErrorMessage,
   Button,
   Spinner,
+  Text,
 } from "@chakra-ui/react";
-import CustomSelect from "./CustomSelect";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import ControlledSelect from "./CustomSelect";
+import FormDataDisplay from "./FormDisplay";
 
-// Custom hook for form submission and data display
-// const useFormSubmit = () => {
-//   const formDataRef = useRef(null);
-
-//   const showFormData = (data: any) => {
-//     formDataRef.current = data;
-//   };
-
-//   return { formDataRef, showFormData };
-// };
-
-// Custom component for displaying form data
-const FormDataDisplay = forwardRef((props, ref) => {
-  const [formData, setFormData] = React.useState(null);
-
-  useImperativeHandle(ref, () => ({
-    showFormData: (data: any) => setFormData(data),
-  }));
-
-  return formData ? (
-    <Box mt={4}>
-      <pre>{JSON.stringify(formData, null, 2)}</pre>
-    </Box>
-  ) : null;
+const validationSchema = z.object({
+  firstName: z
+    .string()
+    .nonempty("Name is required")
+    .regex(/^[a-zA-Z\s'-]+$/, "Name is incorrect"),
+  lastName: z
+    .string()
+    .nonempty("Name is required")
+    .regex(/^[a-zA-Z\s'-]+$/, "Name is incorrect"),
+  gender: z
+    .object({
+      label: z.string(),
+      value: z.string(),
+    })
+    .nullable(),
+  dateOfBirth: z
+    .string()
+    .nonempty("Date of birth is required")
+    .refine((val) => !isNaN(new Date(val).getTime()), "Invalid date format")
+    .refine(
+      (val) => new Date(val) <= new Date(),
+      "Date cannot be in the future"
+    ),
+  email: z.string().email("Invalid email format").nonempty("Email is required"),
+  phoneNumber: z
+    .string()
+    .regex(/^(\+91\d{10})$/, "Invalid phone number format")
+    .nonempty("Phone number is required"),
+  techStack: z
+    .array(
+      z.object({
+        value: z.string().nonempty("Tech stack is required"),
+      })
+    )
+    .nonempty("At least one tech stack is required"),
 });
+
+export type formDataType = {
+  firstName: string;
+  lastName: string;
+  gender: { label: string; value: string };
+  dateOfBirth: string;
+  email: string;
+  phoneNumber: string;
+  techStack: Array<{ value: string }>;
+};
 
 const FormComponent = () => {
   const {
     control,
     handleSubmit,
     register,
-    getValues,
     formState: { errors, isSubmitting },
-  } = useForm();
+  } = useForm({ resolver: zodResolver(validationSchema) });
+
   const { fields, append, remove } = useFieldArray({
     control,
     name: "techStack",
   });
-  // const { formDataRef, showFormData } = useFormSubmit();
 
   interface FormDataDisplayRefObject {
-    showFormData: (data: any) => void;
+    showFormData: (data: formDataType) => void;
   }
 
   const formDataDisplayRef = useRef<FormDataDisplayRefObject>(null);
@@ -64,7 +88,7 @@ const FormComponent = () => {
     const showLoadingSpinner = () =>
       new Promise((resolve) => {
         setTimeout(() => {
-          resolve("res");
+          resolve(data);
         }, 3000);
       });
 
@@ -85,207 +109,232 @@ const FormComponent = () => {
     return !isNaN(parsedDate);
   };
 
-  // const formatDate = (date: Date) => {
-  //   console.log("log::  value", date);
-  //   const parsedDate = new Date(date);
-  //   console.log(
-  //     "format",
-  //     `${parsedDate.getDate()}/${parsedDate.toLocaleString("default", {
-  //       month: "short",
-  //     })}/${parsedDate.getFullYear()}`
-  //   );
-  //   return `${parsedDate.getDate()}/${parsedDate.toLocaleString("default", {
-  //     month: "short",
-  //   })}/${parsedDate.getFullYear()}`;
-  // };
-
-  const formatDate = (date: Date) => {
-    const parsedDate = new Date(date);
-    const day = parsedDate.getDate();
-    const month = parsedDate.toLocaleString("default", { month: "short" });
-    const year = parsedDate.getFullYear();
-
-    console.log(`log:: date ---->${day}/${month}/${year}`);
-    return `${day}/${month}/${year}`;
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const options: Intl.DateTimeFormatOptions = {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    };
+    return date.toLocaleDateString("en-GB", options);
   };
 
   return (
     <ChakraProvider>
-      <Box>
-        <Flex mb={4}>
-          <FormControl isInvalid={!!errors.firstName}>
-            <FormLabel>First Name</FormLabel>
-            <Input
-              placeholder="Enter First name"
-              {...register("firstName", {
-                required: "Name is required",
-                pattern: {
-                  value: namePattern,
-                  message: "Name is incorrect",
-                },
-              })}
-            />
-            <FormErrorMessage>
-              {errors.firstName &&
-                (typeof errors.firstName.message === "string"
-                  ? errors.firstName.message
-                  : "")}
-            </FormErrorMessage>
-          </FormControl>
-          <FormControl isInvalid={!!errors.lastName}>
-            <FormLabel>Last Name</FormLabel>
-            <Input
-              placeholder="Enter Last name"
-              {...register("lastName", {
-                required: "Name is required",
-                pattern: {
-                  value: namePattern,
-                  message: "Name is incorrect",
-                },
-              })}
-            />
-            <FormErrorMessage>
-              {errors.lastName &&
-                (typeof errors.lastName.message === "string"
-                  ? errors.lastName.message
-                  : "")}
-            </FormErrorMessage>
-          </FormControl>
-        </Flex>
-        <Flex mb={4}>
-          <FormControl isInvalid={!!errors.gender}>
-            <FormLabel>Gender</FormLabel>
-            <CustomSelect
-              // name="gender"
+      <Text fontSize="xl" as="b" mt={60}>
+        User Details
+      </Text>
+      <div
+        style={{
+          borderRadius: 20,
+          backgroundColor: "#F5EEE6",
+          alignContent: "center",
+          marginLeft: "auto",
+          marginRight: "auto",
+          marginTop: 50,
+          padding: 10,
+          textAlign: "center",
+          display: "block",
+          width: "70%",
+        }}
+      >
+        <Box>
+          <Text fontSize="xl" as="b">
+            Basic Details
+          </Text>
+          <Flex mb={4}>
+            <FormControl isInvalid={!!errors.firstName} m={4}>
+              <FormLabel>First Name</FormLabel>
+              <Input
+                placeholder="Enter First name"
+                {...register("firstName", {
+                  required: "Name is required",
+                  pattern: {
+                    value: namePattern,
+                    message: "Name is incorrect",
+                  },
+                })}
+                bg={"#E7F2F8"}
+                color={"#000"}
+              />
+              <FormErrorMessage>
+                {errors.firstName &&
+                  (typeof errors.firstName.message === "string"
+                    ? errors.firstName.message
+                    : "")}
+              </FormErrorMessage>
+            </FormControl>
+            <FormControl isInvalid={!!errors.lastName} m={4}>
+              <FormLabel>Last Name</FormLabel>
+              <Input
+                placeholder="Enter Last name"
+                {...register("lastName", {
+                  required: "Name is required",
+                  pattern: {
+                    value: namePattern,
+                    message: "Name is incorrect",
+                  },
+                })}
+                bg={"#E7F2F8"}
+                color={"#000"}
+              />
+              <FormErrorMessage>
+                {errors.lastName &&
+                  (typeof errors.lastName.message === "string"
+                    ? errors.lastName.message
+                    : "")}
+              </FormErrorMessage>
+            </FormControl>
+          </Flex>
+          <Text fontSize="xl" as="b">
+            Other Information
+          </Text>
+          <Flex mb={4}>
+            <ControlledSelect
+              name="gender"
+              control={control}
+              label="Gender"
               placeholder="Select Gender"
               options={[
                 { label: "Male", value: "male" },
                 { label: "Female", value: "female" },
                 { label: "Other", value: "other" },
               ]}
-              {...register("gender", { required: "Gender is required" })}
-              // control={control}
             />
-            <FormErrorMessage>
-              {errors.gender &&
-                (typeof errors.gender.message === "string"
-                  ? errors.gender.message
-                  : "")}
-            </FormErrorMessage>
-          </FormControl>
-          {/* </Box>
-        <Box mb={4}> */}
-          <FormControl isInvalid={!!errors.dateOfBirth}>
-            <FormLabel>Date of Birth</FormLabel>
-            <Input
-              type="date"
-              placeholder="DD/Mon/YYYY"
-              max={new Date().toISOString().split("T")[0]}
-              {...register("dateOfBirth", {
-                // value={getValues('dateOfBirth')},
-                required: "Date of birth is required",
-                validate: {
-                  isValidDate: (value) =>
-                    isValidDate(value) || "Invalid date format",
-                  formatDate: (value) =>
-                    formatDate(value) === value || "Invalid date format",
-
-                  setValueAs: (value) => formatDate(new Date(value)),
-                },
-                // pattern: {
-                //   value: formatDate(value) === value,
-                //   message: "Name is incorrect",
-                // },
-                onChange(event) {
-                  console.log("log:: e", event);
-                },
-              })}
-            />
-            <FormErrorMessage>
-              {errors.dateOfBirth &&
-                (typeof errors.dateOfBirth.message === "string"
-                  ? errors.dateOfBirth.message
-                  : "")}
-            </FormErrorMessage>
-          </FormControl>
-        </Flex>
-        <Flex mb={4}>
-          {/* <Box mb={4}> */}
-          <FormControl isInvalid={!!errors.email}>
-            <FormLabel>Email Address</FormLabel>
-            <Input
-              placeholder="Enter email address"
-              {...register("email", {
-                required: "Email is required",
-                pattern: {
-                  value: emailPattern,
-                  message: "Invalid email format",
-                },
-              })}
-            />
-            <FormErrorMessage>
-              {errors.email &&
-                (typeof errors.email.message === "string"
-                  ? errors.email.message
-                  : "")}
-            </FormErrorMessage>
-          </FormControl>
-          {/* </Box> */}
-          {/* <Box mb={4}> */}
-          <FormControl isInvalid={!!errors.phoneNumber} m={4}>
-            <FormLabel>Phone Number</FormLabel>
-            <Input
-              placeholder="Enter phone number"
-              defaultValue="+91"
-              {...register("phoneNumber", {
-                required: "Phone number is required",
-                pattern: {
-                  value: phonePattern,
-                  message: "Invalid phone number format",
-                },
-              })}
-            />
-            <FormErrorMessage>
-              {errors.phoneNumber &&
-                (typeof errors.phoneNumber.message === "string"
-                  ? errors.phoneNumber.message
-                  : "")}
-            </FormErrorMessage>
-          </FormControl>
-          {/* </Box> */}
-        </Flex>
-        <Box mb={4}>
-          <FormLabel>Tech Stack</FormLabel>
-          {fields.map((item, index) => (
-            <Flex key={item.id} mb={2} alignItems="center">
+            <FormControl isInvalid={!!errors.dateOfBirth} m={4}>
+              <FormLabel>Date of Birth</FormLabel>
               <Input
-                defaultValue={item.id}
-                placeholder="Enter tech stack"
-                {...register(`techStack.${index}.value`, {
-                  required: "Tech stack is required",
+                bg={"#E7F2F8"}
+                color={"#000"}
+                type="date"
+                placeholder="DD/MM/YYYY"
+                max={new Date().toISOString().split("T")[0]}
+                {...register("dateOfBirth", {
+                  required: "Date of birth is required",
+                  validate: {
+                    isValidDate: (value) =>
+                      isValidDate(value) || "Invalid date format",
+                    formatDate: (value) =>
+                      formatDate(value) === value || "Invalid date format",
+                  },
+                  onChange(event) {
+                    console.log("log:: e", event);
+                  },
                 })}
               />
-              {index > 0 && (
-                <Button ml={2} size="sm" onClick={() => remove(index)}>
-                  x
-                </Button>
-              )}
+              <FormErrorMessage>
+                {errors.dateOfBirth &&
+                  (typeof errors.dateOfBirth.message === "string"
+                    ? errors.dateOfBirth.message
+                    : "")}
+              </FormErrorMessage>
+            </FormControl>
+          </Flex>
+          <Flex mb={4}>
+            <FormControl isInvalid={!!errors.email} m={4}>
+              <FormLabel>Email Address</FormLabel>
+              <Input
+                placeholder="Enter email address"
+                {...register("email", {
+                  required: "Email is required",
+                  pattern: {
+                    value: emailPattern,
+                    message: "Invalid email format",
+                  },
+                })}
+                bg={"#E7F2F8"}
+                color={"#000"}
+              />
+              <FormErrorMessage>
+                {errors.email &&
+                  (typeof errors.email.message === "string"
+                    ? errors.email.message
+                    : "")}
+              </FormErrorMessage>
+            </FormControl>
+            <FormControl isInvalid={!!errors.phoneNumber} m={4}>
+              <FormLabel>Phone Number</FormLabel>
+              <Input
+                bg={"#E7F2F8"}
+                color={"#000"}
+                placeholder="Enter phone number"
+                defaultValue="+91"
+                {...register("phoneNumber", {
+                  required: "Phone number is required",
+                  pattern: {
+                    value: phonePattern,
+                    message: "Invalid phone number format",
+                  },
+                })}
+              />
+              <FormErrorMessage>
+                {errors.phoneNumber &&
+                  (typeof errors.phoneNumber.message === "string"
+                    ? errors.phoneNumber.message
+                    : "")}
+              </FormErrorMessage>
+            </FormControl>
+          </Flex>
+          <Box m={4}>
+            <Flex>
+              <FormLabel>Tech Stack</FormLabel>
+              <Button size="xs" onClick={() => append({ value: "" })}>
+                +
+              </Button>
             </Flex>
-          ))}
-          <Button onClick={() => append({ value: "" })}>+</Button>
-        </Box>
+            {fields.map((item, index) => (
+              <Flex key={item.id} mb={2} alignItems="center">
+                <Input
+                  bg={"#E7F2F8"}
+                  color={"#000"}
+                  defaultValue={item.id}
+                  placeholder="Enter tech stack"
+                  {...register(`techStack.${index}.value`, {
+                    required: "Tech stack is required",
+                  })}
+                />
+                {index > 0 && (
+                  <Button ml={2} size="sm" onClick={() => remove(index)}>
+                    x
+                  </Button>
+                )}
+                {
+                  //@ts-ignore
+                  errors?.techStack?.[index]?.value && (
+                    <FormControl isInvalid={!!errors.techStack}>
+                      <FormErrorMessage ml={2}>
+                        {
+                          //@ts-ignore
+                          errors.techStack[index as any].value.message
+                        }
+                      </FormErrorMessage>
+                    </FormControl>
+                  )
+                }
+              </Flex>
+            ))}
+            <FormControl isInvalid={!!errors.techStack}>
+              <FormErrorMessage ml={2}>
+                {errors.techStack &&
+                  (typeof errors.techStack.message === "string"
+                    ? errors.techStack.message
+                    : "")}
+              </FormErrorMessage>
+            </FormControl>
+          </Box>
 
-        <Button
-          mt={4}
-          colorScheme="blue"
-          onClick={handleSubmit(onSubmit)}
-          isLoading={isSubmitting}
-          loadingText="Submitting..."
-          disabled={isSubmitting}
-        >
-          Submit
-        </Button>
-      </Box>
+          <Button
+            mt={4}
+            colorScheme="blue"
+            onClick={handleSubmit(onSubmit)}
+            isLoading={isSubmitting}
+            loadingText="Submitting..."
+            disabled={isSubmitting}
+          >
+            Submit
+          </Button>
+        </Box>
+      </div>
       <FormDataDisplay ref={formDataDisplayRef} />
     </ChakraProvider>
   );
